@@ -21,7 +21,7 @@ pub struct UFRush {
     nodes: Vec<AtomicUsize>,
 }
 
-/// Implementation block for the LockFreeUnionFind struct.
+/// Implementation block for the UFRush struct.
 impl UFRush {
     /// Creates a new union-find data structure with a specified number of elements.
     ///
@@ -29,7 +29,7 @@ impl UFRush {
     /// * `size` - Number of elements in the union-find structure.
     ///
     /// # Returns
-    /// An instance of [`LockFreeUnionFind`].
+    /// An instance of [`UFRush`].
     ///
     /// # Panics
     /// This method will panic if the `size` exceeds the [`MAX_SIZE`].
@@ -107,7 +107,7 @@ impl UFRush {
     /// The advantage of path halving is that it achieves a good balance between the speed of the find
     /// operation and the amount of modification it makes to the tree structure, avoiding a potential
     /// slowdown due to excessively frequent writes in highly concurrent scenarios. Therefore, it is
-    /// particularly suitable for lock-free data structures like [`LockFreeUnionFind`], where minimizing
+    /// particularly suitable for lock-free data structures like [`UFRush`], where minimizing
     /// write contention is crucial for performance.
     pub fn find(&self, mut x: usize) -> usize {
         assert!(x < self.size());
@@ -204,11 +204,11 @@ impl UFRush {
     }
 }
 
-/// This unsafe implementation indicate that [`LockFreeUnionFind`] can safely be shared
+/// This unsafe implementation indicate that [`UFRush`] can safely be shared
 /// across threads (`Sync`).
 unsafe impl Sync for UFRush {}
 
-/// This unsafe implementation indicate that [`LockFreeUnionFind`] is safe to transfer
+/// This unsafe implementation indicate that [`UFRush`] is safe to transfer
 /// the ownership between threads (`Send`).
 unsafe impl Send for UFRush {}
 
