@@ -8,3 +8,10 @@ license = "MIT"
 readme = "README.md"
 repository = "https://github.com/khojasteh/uf_rush"
 documentation = "https://docs.rs/uf_rush/0.1.1"
+
+[dev-dependencies]
+rand = "0.8.5"
+rayon = "1.8.1"
+
+[profile.test]
+opt-level = 3

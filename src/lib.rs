@@ -158,40 +158,52 @@ impl UFRush {
     /// deep, which helps keep the operation's time complexity nearly constant.
     pub fn unite(&self, x: usize, y: usize) -> bool {
         loop {
+            // Load representative for x and y
             let mut x_rep = self.find(x);
             let mut y_rep = self.find(y);
 
+            // If they are already part of the same set, return false
             if x_rep == y_rep {
                 return false;
             }
 
+            // Load the encoded representation of the representatives
             let x_node = self.nodes[x_rep].load(Ordering::Relaxed);
             let y_node = self.nodes[y_rep].load(Ordering::Relaxed);
 
             let mut x_rank = rank(x_node);
             let mut y_rank = rank(y_node);
 
-            if x_rank > y_rank || (x_rank == y_rank && x_rank < y_rank) {
+            // Swap the elements around to always make x the smaller one
+            if x_rank > y_rank || (x_rank == y_rank && x_rep > y_rep) {
                 std::mem::swap(&mut x_rep, &mut y_rep);
                 std::mem::swap(&mut x_rank, &mut y_rank);
             }
 
+            // x_rep is a root
             let cur_value = encode(x_rep, x_rank);
+            // assign the new root to be y
             let new_value = encode(y_rep, x_rank);
+            // change the value of the smaller subtree root to point to the other one
             if self.nodes[x_rep]
                 .compare_exchange(cur_value, new_value, Ordering::Release, Ordering::Acquire)
                 .is_ok()
             {
-                let cur_value = encode(y_rep, y_rank);
-                let new_value = encode(y_rep, y_rank + 1);
-                let _ = self.nodes[y_rep].compare_exchange_weak(
-                    cur_value,
-                    new_value,
-                    Ordering::Release,
-                    Ordering::Relaxed,
-                );
+                // x_repr now points to y_repr
+                // If the subtrees has the same height, increase the rank of the new root
+                if x_rank == y_rank {
+                    let cur_value = encode(y_rep, y_rank);
+                    let new_value = encode(y_rep, y_rank + 1);
+                    let _ = self.nodes[y_rep].compare_exchange_weak(
+                        cur_value,
+                        new_value,
+                        Ordering::Release,
+                        Ordering::Relaxed,
+                    );
+                }
                 return true;
             }
+            // A different thread has already merged modified the value of x_repr -> repeat
         }
     }
 
@@ -311,6 +323,50 @@ mod tests {
     #[test]
     fn test_multithreaded_acyclic_graph() {
         assert!(!is_cyclic(4, [(0, 1), (1, 2), (2, 3)]));
+    }
+
+    #[test]
+    fn stress_test() {
+        use rand::prelude::*;
+        use std::sync::{Arc, Barrier};
+        use std::thread;
+
+        let num_elements = 1_00_000; // Adjust based on the system's capability
+
+        let elements = 1 << 9;
+
+        // Preparing a pool of element pairs for unification
+        let mut pairs = Vec::new();
+        // Make sure everythin is connected
+        for i in 0..=elements {
+            let i = i % elements;
+            pairs.push((i, i + 1));
+        }
+        // Add random edges to the graph
+        for i in 0..num_elements - 1 {
+            let source = rand::random::<usize>() % elements;
+            let target = rand::random::<usize>() % elements;
+            pairs.push((source, target));
+        }
+
+        for i in 0..1000 {
+            // Shuffle pairs to randomize access patterns
+            let uf = Arc::new(UFRush::new(elements + 1));
+            use rand::{thread_rng, Rng};
+            use rayon::prelude::*;
+            let mut rng = thread_rng();
+            let total_unites = AtomicUsize::new(0);
+            let total_unites = &total_unites;
+            pairs.shuffle(&mut rng);
+
+            pairs.par_iter().for_each(|(x, y)| {
+                if uf.unite(*x, *y) {
+                    total_unites.fetch_add(1, Ordering::Relaxed);
+                }
+            });
+
+            assert_eq!(total_unites.load(Ordering::SeqCst), elements);
+        }
     }
 
     fn is_cyclic<I>(vertices: usize, edges: I) -> bool
