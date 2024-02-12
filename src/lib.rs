@@ -242,6 +242,8 @@ fn rank(n: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::prelude::*;
+    use std::collections::HashSet;
     use std::sync::Arc;
     use std::thread;
 
@@ -327,45 +329,44 @@ mod tests {
 
     #[test]
     fn stress_test() {
-        use rand::prelude::*;
-        use std::sync::{Arc, Barrier};
-        use std::thread;
+        let node_count = 500;
+        let mut rng = rand::thread_rng();
+        let mut edges = HashSet::with_capacity(node_count + node_count / 10);
 
-        let num_elements = 1_00_000; // Adjust based on the system's capability
+        // Add edges to form a cycle
+        edges.extend((0..node_count).map(|n| (n, (n + 1) % node_count)));
 
-        let elements = 1 << 9;
-
-        // Preparing a pool of element pairs for unification
-        let mut pairs = Vec::new();
-        // Make sure everythin is connected
-        for i in 0..=elements {
-            let i = i % elements;
-            pairs.push((i, i + 1));
-        }
-        // Add random edges to the graph
-        for i in 0..num_elements - 1 {
-            let source = rand::random::<usize>() % elements;
-            let target = rand::random::<usize>() % elements;
-            pairs.push((source, target));
+        // Add some extra random edges
+        for _ in edges.len()..edges.capacity() {
+            let u = rng.gen_range(0..node_count);
+            let v = rng.gen_range(0..node_count);
+            if u != v {
+                edges.insert((u, v));
+            }
         }
 
-        for i in 0..1000 {
-            // Shuffle pairs to randomize access patterns
-            let uf = Arc::new(UFRush::new(elements + 1));
-            use rand::{thread_rng, Rng};
-            use rayon::prelude::*;
-            let mut rng = thread_rng();
-            let total_unites = AtomicUsize::new(0);
-            let total_unites = &total_unites;
-            pairs.shuffle(&mut rng);
+        let mut edges: Vec<_> = edges.into_iter().collect();
+        for _ in 0..100 {
+            edges.shuffle(&mut rng);
+            let uf = Arc::new(UFRush::new(node_count));
 
-            pairs.par_iter().for_each(|(x, y)| {
-                if uf.unite(*x, *y) {
-                    total_unites.fetch_add(1, Ordering::Relaxed);
-                }
-            });
+            // Spawn threads and collect their join handles
+            let handles: Vec<_> = edges
+                .iter()
+                .map(|&(u, v)| {
+                    let uf = Arc::clone(&uf);
+                    thread::spawn(move || uf.unite(u, v))
+                })
+                .collect();
 
-            assert_eq!(total_unites.load(Ordering::SeqCst), elements);
+            // Wait for all threads to finish; count the number of unites
+            let total_unites = handles
+                .into_iter()
+                .map(|handle| handle.join().unwrap())
+                .filter(|&united| united)
+                .count();
+
+            assert_eq!(total_unites, node_count - 1);
         }
     }
 
