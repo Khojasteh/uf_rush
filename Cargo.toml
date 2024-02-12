@@ -2,7 +2,7 @@
 name = "uf_rush"
 authors = ["Kambiz Khojasteh"]
 description = "A lock-free, thread-safe implementation of the Union-Find (Disjoint-Set) data structure."
-keywords = ["union-find", "disjoint-sets", "data-structure", "concurrency", "parallel-computing", "lock-free", "thread-safe", "algorithm"]
+keywords = ["union-find", "disjoint-sets", "lock-free", "thread-safe"]
 categories = ["data-structures", "algorithms", "concurrency"]
 version = "0.2.0"
 edition = "2021"
