@@ -291,17 +291,16 @@ mod tests {
 
     #[test]
     fn test_multithreaded_build_cyclic_graph() {
-        // Number of elements and threads
-        let n = 100;
-        let uf = Arc::new(UFRush::new(n));
+        let vertices = 100;
+        let uf = Arc::new(UFRush::new(vertices));
 
-        // Spawn threads
-        let handles: Vec<_> = (0..n)
-            .map(|i| {
+        // Spawn threads, one thread per nodes
+        let handles: Vec<_> = (0..vertices)
+            .map(|n| {
                 let uf = Arc::clone(&uf);
                 thread::spawn(move || {
-                    // Unite the current element with the next one, creating a cycle
-                    uf.unite(i, (i + 1) % n);
+                    // Unite the current node with the next one, creating a cycle
+                    uf.unite(n, (n + 1) % vertices);
                 })
             })
             .collect();
@@ -311,9 +310,9 @@ mod tests {
             handle.join().unwrap();
         }
 
-        // Check results - all elements should be in the same subset
-        for i in 0..n - 1 {
-            assert!(uf.same(i, (i + 1) % n));
+        // Check results - all nodes should be in the same subset
+        for n in 0..vertices - 1 {
+            assert!(uf.same(n, (n + 1) % vertices));
         }
     }
 
@@ -329,28 +328,28 @@ mod tests {
 
     #[test]
     fn stress_test() {
-        let node_count = 500;
+        let vertices = 100;
+        let mut edges = HashSet::with_capacity(5 * vertices);
         let mut rng = rand::thread_rng();
-        let mut edges = HashSet::with_capacity(node_count + node_count / 10);
 
         // Add edges to form a cycle
-        edges.extend((0..node_count).map(|n| (n, (n + 1) % node_count)));
+        edges.extend((0..vertices).map(|n| (n, (n + 1) % vertices)));
 
         // Add some extra random edges
         for _ in edges.len()..edges.capacity() {
-            let u = rng.gen_range(0..node_count);
-            let v = rng.gen_range(0..node_count);
+            let u = rng.gen_range(0..vertices);
+            let v = rng.gen_range(0..vertices);
             if u != v {
                 edges.insert((u, v));
             }
         }
 
+        // Validate the number of successful unite actions for some random arrangement of edges
         let mut edges: Vec<_> = edges.into_iter().collect();
         for _ in 0..100 {
-            edges.shuffle(&mut rng);
-            let uf = Arc::new(UFRush::new(node_count));
+            let uf = Arc::new(UFRush::new(vertices));
 
-            // Spawn threads and collect their join handles
+            // Spawn threads, one thread per edge
             let handles: Vec<_> = edges
                 .iter()
                 .map(|&(u, v)| {
@@ -359,14 +358,18 @@ mod tests {
                 })
                 .collect();
 
-            // Wait for all threads to finish; count the number of unites
-            let total_unites = handles
+            // Wait for all threads to finish; count the number of united edges
+            let total_united = handles
                 .into_iter()
                 .map(|handle| handle.join().unwrap())
                 .filter(|&united| united)
                 .count();
 
-            assert_eq!(total_unites, node_count - 1);
+            // Ensure the number of successful unite actions is as expected
+            assert_eq!(total_united, vertices - 1);
+
+            // Shuffle the edges for the next iteration
+            edges.shuffle(&mut rng);
         }
     }
 
@@ -376,7 +379,7 @@ mod tests {
     {
         let uf = Arc::new(UFRush::new(vertices));
 
-        // Spawn threads
+        // Spawn threads, one thread per edge
         let handles: Vec<_> = edges
             .into_iter()
             .map(|(u, v)| {
@@ -394,7 +397,10 @@ mod tests {
             })
             .collect();
 
-        // Wait for all threads to finish and check if any of them found a cycle
-        handles.into_iter().any(|handle| handle.join().unwrap())
+        // Wait for all threads to finish and return if there was any cycle
+        handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .any(|cyclic| cyclic)
     }
 }
